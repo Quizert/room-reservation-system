@@ -91,24 +91,6 @@ func (a *AuthServiceImpl) LoginUser(ctx context.Context, user *models.User) (str
 	return token, nil
 }
 
-func (a *AuthServiceImpl) IsHotelier(ctx context.Context, userID int) (bool, error) {
-	a.log.With(
-		zap.String("Layer", "Auth.IsHotelier"),
-		zap.Int("user_id", userID))
-
-	IsHotelier, err := a.storage.IsHotelier(ctx, userID)
-	if err != nil {
-		if errors.Is(err, myerror.ErrUserNotFound) {
-			a.log.Warn("user not found", zap.Error(err))
-			return false, fmt.Errorf("%s: %w", "auth.LoginUser", err)
-		}
-		a.log.Error("failed to check if user is hotelier", zap.Error(err))
-		return false, fmt.Errorf("%s: %w", "auth.LoginUser", err)
-
-	}
-	return IsHotelier, nil
-}
-
 func (a *AuthServiceImpl) GetHotelierInformation(ctx context.Context, request *authpb.GetHotelierRequest) (*authpb.GetHotelierResponse, error) {
 	response, err := a.storage.GetHotelierInformation(ctx, request)
 	if err != nil {
@@ -120,3 +102,21 @@ func (a *AuthServiceImpl) GetHotelierInformation(ctx context.Context, request *a
 	}
 	return response, nil
 }
+
+//func (a *AuthServiceImpl) IsHotelier(ctx context.Context, userID int) (bool, error) {
+//	a.log.With(
+//		zap.String("Layer", "Auth.IsHotelier"),
+//		zap.Int("user_id", userID))
+//
+//	IsHotelier, err := a.storage.IsHotelier(ctx, userID)
+//	if err != nil {
+//		if errors.Is(err, myerror.ErrUserNotFound) {
+//			a.log.Warn("user not found", zap.Error(err))
+//			return false, fmt.Errorf("%s: %w", "auth.LoginUser", err)
+//		}
+//		a.log.Error("failed to check if user is hotelier", zap.Error(err))
+//		return false, fmt.Errorf("%s: %w", "auth.LoginUser", err)
+//
+//	}
+//	return IsHotelier, nil
+//}

@@ -10,6 +10,7 @@ import (
 	"github.com/Quizert/room-reservation-system/AuthSvc/internal/service"
 	"github.com/Quizert/room-reservation-system/AuthSvc/internal/storage/postgres"
 	"github.com/Quizert/room-reservation-system/AuthSvc/pkj/authpb"
+	"github.com/Quizert/room-reservation-system/Libs/metrics"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -23,10 +24,11 @@ import (
 )
 
 type App struct {
-	server     *http.Server
-	GRPCServer *grpcserver.Server
-	dbPool     *pgxpool.Pool
-	log        *zap.Logger
+	server       *http.Server
+	metricServer *http.Server
+	GRPCServer   *grpcserver.Server
+	dbPool       *pgxpool.Pool
+	log          *zap.Logger
 }
 
 func NewApp() *App {
@@ -85,12 +87,19 @@ func (a *App) Init(ctx context.Context) error {
 
 	authHandler := controller.NewAuthHandler(authService)
 	route := controller.SetupRoutes(authHandler)
+	metricRoute := metrics.SetupMetricsRoute()
 
 	a.server = &http.Server{
 		Addr:    ":" + cfg.HTTPPort,
 		Handler: route,
 	}
+	a.metricServer = &http.Server{
+		Addr:    ":" + cfg.HTTPMetricPort,
+		Handler: metricRoute,
+	}
 	a.GRPCServer = grpcserver.NewServer(authService, ":"+cfg.GRPCPort)
+	a.log.Debug("Initialization complete")
+
 	return nil
 }
 
@@ -101,6 +110,15 @@ func (a *App) Start(ctx context.Context) error {
 	defer stop()
 
 	group, groupCtx := errgroup.WithContext(ctx)
+
+	group.Go(func() error {
+		if err := a.metricServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			a.log.Error("Error in ListenAndServe metricServer", zap.Error(err))
+			return fmt.Errorf("failed to serve HTTP metricServer: %w", err)
+		}
+		a.log.Info("HTTP mainServer stopped")
+		return nil
+	})
 
 	group.Go(func() error {
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

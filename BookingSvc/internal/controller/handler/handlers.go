@@ -33,7 +33,7 @@ func NewBookingHandler(b BookingService) *BookingHandler {
 
 func (b *BookingHandler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	status := http.StatusOK
+	status := http.StatusCreated
 	defer func() {
 		duration := time.Since(start).Seconds()
 		metrics.RecordHttpMetrics(r.Method, "/bookings", http.StatusText(status), duration)
@@ -62,7 +62,6 @@ func (b *BookingHandler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	status = http.StatusCreated
 	w.WriteHeader(http.StatusCreated)
 }
 
