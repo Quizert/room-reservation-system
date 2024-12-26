@@ -1,0 +1,277 @@
+swagger: "2.0"
+info:
+  description: "API для управления бронированиями"
+  version: "1.0.0"
+  title: "Booking Service API"
+host: "localhost:8080"
+basePath: "/"
+schemes:
+  - "http"
+
+paths:
+  /bookings:
+    post:
+      tags:
+        - "bookings"
+      summary: "Создать бронирование"
+      description: "Создаёт новое бронирование для пользователя"
+      consumes:
+        - "application/json"
+      produces:
+        - "application/json"
+      parameters:
+        - in: "body"
+          name: "body"
+          description: "Данные для создания бронирования"
+          required: true
+          schema:
+            $ref: "#/definitions/BookingRequest"
+      responses:
+        201:
+          description: "Бронирование успешно создано"
+        400:
+          description: "Некорректные данные (bad request)"
+        409:
+          description: "Бронирование уже существует"
+        500:
+          description: "Внутренняя ошибка сервера"
+
+  /bookings/users:
+    get:
+      tags:
+        - "bookings"
+      summary: "Получить бронирования по ID пользователя"
+      description: >
+        Возвращает массив бронирований для пользователя.  
+        Требует query-параметр `user_id`.  
+        Проверяется, совпадает ли запрошенный `user_id` с `user_id` в контексте.
+      produces:
+        - "application/json"
+      parameters:
+        - name: "user_id"
+          in: "query"
+          description: "ID пользователя"
+          required: true
+          type: "integer"
+      responses:
+        200:
+          description: "Список бронирований"
+          schema:
+            type: "array"
+            items:
+              $ref: "#/definitions/BookingInfo"
+        400:
+          description: "Некорректный запрос (ошибка парсинга user_id)"
+        403:
+          description: "Доступ запрещён (user_id не совпадает)"
+        500:
+          description: "Внутренняя ошибка сервера"
+
+  /bookings/hotels:
+    get:
+      tags:
+        - "bookings"
+      summary: "Получить бронирования по ID отеля"
+      description: >
+        Возвращает массив бронирований для указанного отеля.  
+        Требует query-параметр `hotel_id`.  
+        Проверяется, что текущий пользователь (`user_id` из контекста) является владельцем отеля.
+      produces:
+        - "application/json"
+      parameters:
+        - name: "hotel_id"
+          in: "query"
+          description: "ID отеля"
+          required: true
+          type: "integer"
+      responses:
+        200:
+          description: "Список бронирований"
+          schema:
+            type: "array"
+            items:
+              $ref: "#/definitions/BookingInfo"
+        400:
+          description: "Некорректный запрос (ошибка парсинга hotel_id)"
+        403:
+          description: "Доступ запрещён (пользователь не владелец отеля)"
+        404:
+          description: "Отель не найден"
+        500:
+          description: "Внутренняя ошибка сервера"
+
+  /bookings/hotels/rooms:
+    get:
+      tags:
+        - "bookings"
+      summary: "Получить доступные комнаты"
+      description: >
+        Возвращает список доступных комнат по указанному `hotel_id`.  
+        Требуется передать `start_date` и `end_date` в формате RFC3339,  
+        например `2024-01-01T12:00:00Z`.
+      produces:
+        - "application/json"
+      parameters:
+        - name: "hotel_id"
+          in: "query"
+          description: "ID отеля"
+          required: true
+          type: "integer"
+        - name: "start_date"
+          in: "query"
+          description: "Дата начала периода (RFC3339)"
+          required: true
+          type: "string"
+          format: "date-time"
+        - name: "end_date"
+          in: "query"
+          description: "Дата окончания периода (RFC3339)"
+          required: true
+          type: "string"
+          format: "date-time"
+      responses:
+        200:
+          description: "Список доступных комнат"
+          schema:
+            type: "array"
+            items:
+              $ref: "#/definitions/Room"
+        400:
+          description: "Некорректный запрос (ошибка парсинга дат или hotel_id)"
+        500:
+          description: "Внутренняя ошибка сервера"
+
+  /bookings/payment/response:
+    post:
+      tags:
+        - "payments"
+      summary: "Обработка платежного вебхука"
+      description: >
+        Обрабатывает статус платежа от платёжной системы.  
+        В случае успеха (status = success) обновляет бронирование.
+      consumes:
+        - "application/json"
+      produces:
+        - "text/plain"
+      parameters:
+        - in: "body"
+          name: "body"
+          description: "Данные о платеже"
+          required: true
+          schema:
+            $ref: "#/definitions/PaymentResponse"
+      responses:
+        200:
+          description: "Платёж успешно обработан (success booking!)"
+        400:
+          description: "Некорректные данные запроса"
+        500:
+          description: "Внутренняя ошибка сервера"
+
+definitions:
+  BookingRequest:
+    type: "object"
+    properties:
+      room_id:
+        type: "integer"
+        description: "ID комнаты"
+      hotel_id:
+        type: "integer"
+        description: "ID отеля"
+      hotel_name:
+        type: "string"
+        description: "Название отеля"
+      room_description:
+        type: "string"
+        description: "Описание комнаты"
+      room_number:
+        type: "integer"
+        description: "Номер комнаты"
+      room_base_price:
+        type: "integer"
+        description: "Базовая стоимость комнаты"
+      card_number:
+        type: "string"
+        description: "Номер банковской карты"
+      count_of_people:
+        type: "integer"
+        description: "Количество людей"
+      start_date:
+        type: "string"
+        format: "date-time"
+        description: "Дата и время начала бронирования (RFC3339)"
+      end_date:
+        type: "string"
+        format: "date-time"
+        description: "Дата и время окончания бронирования (RFC3339)"
+    required:
+      - room_id
+      - hotel_id
+      - hotel_name
+      - room_description
+      - room_number
+      - room_base_price
+      - card_number
+      - count_of_people
+      - start_date
+      - end_date
+
+  BookingInfo:
+    type: "object"
+    properties:
+      user_id:
+        type: "integer"
+        description: "ID пользователя, который сделал бронирование"
+      room_id:
+        type: "integer"
+        description: "ID комнаты"
+      hotel_id:
+        type: "integer"
+        description: "ID отеля"
+      start_date:
+        type: "string"
+        format: "date-time"
+        description: "Дата и время начала бронирования (RFC3339)"
+      end_date:
+        type: "string"
+        format: "date-time"
+        description: "Дата и время окончания бронирования (RFC3339)"
+
+  Room:
+    type: "object"
+    properties:
+      id:
+        type: "integer"
+        description: "ID комнаты"
+      hotelid:
+        type: "integer"
+        description: "ID отеля"
+      number:
+        type: "integer"
+        description: "Номер комнаты"
+      cost:
+        type: "integer"
+        description: "Стоимость комнаты"
+      room_description:
+        type: "string"
+        description: "Описание комнаты"
+
+  PaymentResponse:
+    type: "object"
+    properties:
+      status:
+        type: "string"
+        description: "Статус платежа (success, fail)"
+      meta_data:
+        $ref: "#/definitions/BookingMessage"
+    required:
+      - status
+      - meta_data
+
+  BookingMessage:
+    type: "object"
+    description: "Дополнительные данные о бронировании (пример структуры для PaymentResponse)"
+    properties:
+      booking_id:
+        type: "integer"
+        description: "ID бронирования"

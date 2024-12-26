@@ -1,20 +1,12 @@
-FROM golang:1.19-alpine AS builder
+FROM golang:1.23 AS builder
 
-WORKDIR /app
+WORKDIR /NotificationSvc
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
-RUN go install github.com/joho/godotenv/cmd/godotenv@latest
+RUN go build -o notification-svc ./cmd/main.go
 
-RUN go build -o main ./cmd/main.go
-
-FROM alpine:latest
-
-WORKDIR /app
-COPY --from=builder /app/main /app/main
-COPY .env .env
-
-CMD ["./main"]
+CMD ["./notification-svc"]

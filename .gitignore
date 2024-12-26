@@ -1,1 +1,3 @@
 .idea/
+.env
+auth.lua

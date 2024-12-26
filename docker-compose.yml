@@ -1,0 +1,198 @@
+version: "3.9"
+services:
+  booking-service:
+    build:
+      context: ./BookingSvc
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "8080:${BOOKING_HTTP_PORT}"
+      - "50051:${BOOKING_GRPC_PORT}"
+    depends_on:
+      booking-db:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  booking-db:
+    image: postgres:15
+    container_name: booking-db
+    env_file:
+      - .env
+    ports:
+      - "5434:${BOOKING_DB_PORT}"
+    environment:
+      POSTGRES_USER: ${BOOKING_DB_USER}
+      POSTGRES_PASSWORD: ${BOOKING_DB_PASSWORD}
+      POSTGRES_DB: ${BOOKING_DB_NAME}
+    volumes:
+      - booking-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    networks:
+      - app-network
+  auth-service:
+    build:
+      context: ./AuthSvc
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "8083:${AUTH_HTTP_PORT}"
+      - "50053:${AUTH_GRPC_PORT}"
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  auth-db:
+    image: postgres:15
+    container_name: auth-db
+    env_file:
+      - .env
+    ports:
+      - "5435:${BOOKING_DB_PORT}"
+    environment:
+      POSTGRES_USER: ${AUTH_DB_USER}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
+      POSTGRES_DB: ${AUTH_DB_NAME}
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    networks:
+      - app-network
+
+  hotel-service:
+    build:
+      context: ./HotelSvc
+      dockerfile: Dockerfile
+    ports:
+      - "8081:${HOTEL_HTTP_PORT}"
+      - "50052:${HOTEL_GRPC_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      hotel-db:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  hotel-db:
+    image: postgres:15
+    container_name: hotel-db
+    env_file:
+      - .env
+    ports:
+      - "5433:${HOTEL_DB_PORT}"
+    environment:
+      POSTGRES_USER: ${HOTEL_DB_USER}
+      POSTGRES_PASSWORD: ${HOTEL_DB_PASSWORD}
+      POSTGRES_DB: ${HOTEL_DB_NAME}
+    volumes:
+      - hotel-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${HOTEL_DB_USER}" ]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    networks:
+      - app-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - app-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+    networks:
+      - app-network
+
+  notification-svc:
+    build:
+      context: ./NotificationSvc
+      dockerfile: Dockerfile
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: kafka:9092
+      TELEGRAM_TOKEN: "${TELEGRAM_TOKEN}"
+    env_file:
+      - .env
+    networks:
+      - app-network
+
+  payment-system:
+    build:
+      context: ./PaymentSystem
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "8082:8080"
+    networks:
+      - app-network
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - app-network
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    networks:
+      - app-network
+    depends_on:
+      - prometheus
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"      # UI (заходить http://localhost:16686)
+      - "14268:14268"      # Collector endpoint (HTTP)
+      - "6831:6831/udp"    # Thrift/UDP
+      - "6832:6832/udp"
+      - "4317:4317"        # OTLP gRPC (если вдруг нужно)
+      - "4318:4318"        # OTLP HTTP
+    networks:
+      - app-network
+
+
+
+volumes:
+  booking-db-data:
+  hotel-db-data:
+  auth-db-data:
+
+networks:
+  app-network:
+    driver: bridge

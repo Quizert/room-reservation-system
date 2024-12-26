@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package authpb;
+
+option go_package = "authpb/";
+
+service AuthService {
+  rpc GetHotelierInformation (GetHotelierRequest) returns (GetHotelierResponse);
+}
+
+message GetHotelierRequest {
+  int32 ownerID = 1;
+}
+
+message GetHotelierResponse {
+  string username = 1;
+  string chatID = 2;
+}

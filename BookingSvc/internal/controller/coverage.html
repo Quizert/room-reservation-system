@@ -1,0 +1,380 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>controller: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/Quizert/room-reservation-system/BookingSvc/internal/controller/handlers.go (39.6%)</option>
+				
+				<option value="file1">github.com/Quizert/room-reservation-system/BookingSvc/internal/controller/route.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package controller
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "github.com/Quizert/room-reservation-system/BookingSvc/internal/models"
+        "github.com/Quizert/room-reservation-system/BookingSvc/internal/myerror"
+        "github.com/Quizert/room-reservation-system/HotelSvc/api/grpc/hotelpb"
+        "github.com/Quizert/room-reservation-system/Libs/metrics"
+        "go.opentelemetry.io/otel/attribute"
+        "go.opentelemetry.io/otel/trace"
+        "log"
+        "net/http"
+        "strconv"
+        "time"
+)
+
+//go:generate mockgen -source=handlers.go -destination=../mocks/service_mock.go -package=mocks
+type BookingService interface {
+        CreateBooking(ctx context.Context, bookingRequest *models.BookingRequest, user *models.User) error
+        GetBookingsByUserID(ctx context.Context, userID int) ([]*models.BookingInfo, error)
+        GetBookingsByHotelID(ctx context.Context, hotelID, userID int) ([]*models.BookingInfo, error)
+        GetAvailableRooms(ctx context.Context, hotelID int, startDate, endDate time.Time) ([]*hotelpb.Room, error)
+        UpdateBookingStatus(ctx context.Context, status string, bookingMessage *models.BookingMessage) error
+}
+
+type BookingHandler struct {
+        bookingService BookingService
+        tracer         trace.Tracer
+}
+
+func NewBookingHandler(b BookingService, tracer trace.Tracer) *BookingHandler <span class="cov8" title="1">{
+        return &amp;BookingHandler{
+                bookingService: b,
+                tracer:         tracer,
+        }
+}</span>
+
+func (b *BookingHandler) CreateBooking(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        ctx, span := b.tracer.Start(r.Context(), "Handler.CreateBooking")
+        defer span.End()
+
+        start := time.Now()
+        status := http.StatusOK
+        defer func() </span><span class="cov8" title="1">{
+                duration := time.Since(start).Seconds()
+                metrics.RecordHttpMetrics(r.Method, "/bookings", http.StatusText(status), duration)
+        }</span>()
+
+        // Получаем данные пользователя
+        <span class="cov8" title="1">userID := ctx.Value("user_id").(int)
+        username := ctx.Value("username").(string)
+        chatID := ctx.Value("chat_id").(string)
+
+        span.SetAttributes(
+                attribute.Int("user_id", userID),
+                attribute.String("username", username),
+                attribute.String("chat_id", chatID),
+        )
+
+        user := models.NewUser(userID, username, chatID)
+
+        var bookingRequest models.BookingRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;bookingRequest); err != nil </span><span class="cov8" title="1">{
+                status = http.StatusBadRequest
+                span.RecordError(err)
+                http.Error(w, "bad request", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov8" title="1">if err := b.bookingService.CreateBooking(ctx, &amp;bookingRequest, user); err != nil </span><span class="cov8" title="1">{
+                span.RecordError(err)
+                if errors.Is(err, myerror.ErrBookingAlreadyExists) </span><span class="cov8" title="1">{
+                        status = http.StatusConflict
+                        http.Error(w, myerror.ErrBookingAlreadyExists.Error(), http.StatusConflict)
+                        return
+                }</span>
+                <span class="cov8" title="1">status = http.StatusInternalServerError
+                http.Error(w, "server error", http.StatusInternalServerError)
+                return</span>
+        }
+        <span class="cov8" title="1">status = http.StatusCreated
+        w.WriteHeader(http.StatusCreated)
+        span.AddEvent("Booking created successfully")</span>
+}
+
+func (b *BookingHandler) GetBookingByUserID(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        ctx, span := b.tracer.Start(r.Context(), "Handler.GetBookingByUserID")
+        defer span.End()
+
+        start := time.Now()
+        status := http.StatusOK
+        defer func() </span><span class="cov8" title="1">{
+                duration := time.Since(start).Seconds()
+                metrics.RecordHttpMetrics(r.Method, "/bookings/users", http.StatusText(status), duration)
+        }</span>()
+
+        <span class="cov8" title="1">userID := ctx.Value("user_id").(int)
+        span.SetAttributes(attribute.Int("user_id", userID))
+
+        userIDParams, err := strconv.Atoi(r.URL.Query().Get("user_id"))
+        if err != nil </span><span class="cov8" title="1">{
+                status = http.StatusBadRequest
+                span.RecordError(err)
+                http.Error(w, "Invalid user id", http.StatusBadRequest)
+                return
+        }</span>
+        <span class="cov8" title="1">if userIDParams != userID </span><span class="cov8" title="1">{
+                status = http.StatusForbidden
+                http.Error(w, "forbidden access", http.StatusForbidden)
+                return
+        }</span>
+
+        <span class="cov8" title="1">bookings, err := b.bookingService.GetBookingsByUserID(ctx, userID)
+        if err != nil </span><span class="cov8" title="1">{
+                status = http.StatusInternalServerError
+                span.RecordError(err)
+                http.Error(w, "server error", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(bookings)
+        span.AddEvent("Bookings retrieved successfully")</span>
+}
+
+func (b *BookingHandler) GetBookingByHotelID(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        ctx, span := b.tracer.Start(r.Context(), "Handler.GetBookingByHotelID")
+        defer span.End()
+
+        start := time.Now()
+        status := http.StatusOK
+        defer func() </span><span class="cov0" title="0">{
+                duration := time.Since(start).Seconds()
+                metrics.RecordHttpMetrics(r.Method, "/bookings/hotels", http.StatusText(status), duration)
+        }</span>()
+
+        <span class="cov0" title="0">userID := ctx.Value("user_id").(int) // Должен быть Владелец отеля
+        hotelID, err := strconv.Atoi(r.URL.Query().Get("hotel_id"))
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+
+                status = http.StatusBadRequest
+                http.Error(w, "Invalid user id", http.StatusBadRequest)
+                return
+        }</span>
+        <span class="cov0" title="0">span.SetAttributes(attribute.Int("user_id", userID), attribute.Int("hotel_id", hotelID))
+
+        bookings, err := b.bookingService.GetBookingsByHotelID(ctx, hotelID, userID)
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+
+                if errors.Is(err, myerror.ErrForbiddenAccess) </span><span class="cov0" title="0">{
+                        status = http.StatusForbidden
+                        http.Error(w, "forbidden access", http.StatusForbidden)
+                        return
+                }</span> else<span class="cov0" title="0"> if errors.Is(err, myerror.ErrHotelNotFound) </span><span class="cov0" title="0">{
+                        status = http.StatusNotFound
+                        http.Error(w, "hotel not found", http.StatusNotFound)
+                        return
+                }</span>
+                <span class="cov0" title="0">status = http.StatusInternalServerError
+                http.Error(w, "server error", http.StatusInternalServerError)
+                return</span>
+        }
+        <span class="cov0" title="0">w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(bookings)
+        span.AddEvent("Bookings retrieved successfully")</span>
+}
+
+func (b *BookingHandler) GetAvailableRooms(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        ctx, span := b.tracer.Start(r.Context(), "Handler.GetAvailableRooms")
+        defer span.End()
+
+        start := time.Now()
+        status := http.StatusOK
+        defer func() </span><span class="cov0" title="0">{
+                duration := time.Since(start).Seconds()
+                metrics.RecordHttpMetrics(r.Method, "/bookings/hotels/rooms", http.StatusText(status), duration)
+        }</span>()
+        <span class="cov0" title="0">hotelId, err := strconv.Atoi(r.URL.Query().Get("hotel_id"))
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+                status = http.StatusBadRequest
+                http.Error(w, "Invalid hotel_id", http.StatusBadRequest)
+                return
+        }</span>
+        <span class="cov0" title="0">startDateStr := r.URL.Query().Get("start_date")
+        endDateStr := r.URL.Query().Get("end_date")
+
+        // Парсим start_date
+        startDate, err := time.Parse(time.RFC3339, startDateStr)
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+                status = http.StatusBadRequest
+                http.Error(w, fmt.Sprintf("Invalid start_date: %v", err), http.StatusBadRequest)
+                return
+        }</span>
+        // Парсим end_date
+        <span class="cov0" title="0">endDate, err := time.Parse(time.RFC3339, endDateStr)
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+                status = http.StatusBadRequest
+                http.Error(w, fmt.Sprintf("Invalid end_date: %v", err), http.StatusBadRequest)
+                return
+        }</span>
+        <span class="cov0" title="0">availableRooms, err := b.bookingService.GetAvailableRooms(ctx, hotelId, startDate.UTC(), endDate.UTC())
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+                status = http.StatusInternalServerError
+                http.Error(w, "server error", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov0" title="0">w.Header().Set("Content-Type", "application/json")
+        span.AddEvent("Get available rooms success")
+        json.NewEncoder(w).Encode(availableRooms)</span>
+}
+
+func (b *BookingHandler) HandlePaymentWebHook(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        ctx, span := b.tracer.Start(r.Context(), "Handler.HandlePaymentWebHook")
+        defer span.End()
+
+        start := time.Now()
+        status := http.StatusOK
+        defer func() </span><span class="cov0" title="0">{
+                duration := time.Since(start).Seconds()
+                metrics.RecordHttpMetrics(r.Method, "/bookings/payment/response", http.StatusText(status), duration)
+        }</span>()
+        <span class="cov0" title="0">var paymentResponse models.PaymentResponse
+        if err := json.NewDecoder(r.Body).Decode(&amp;paymentResponse); err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+
+                http.Error(w, "invalid request", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">err := b.bookingService.UpdateBookingStatus(ctx, paymentResponse.Status, paymentResponse.MetaData)
+
+        switch paymentResponse.Status </span>{
+        case "success":<span class="cov0" title="0">
+                if err != nil </span><span class="cov0" title="0">{
+                        span.RecordError(err)
+
+                        status = http.StatusInternalServerError
+                        log.Println("handler UpdateBookingStatusSuccess: ", err.Error())
+                        http.Error(w, "server error", http.StatusInternalServerError)
+                        return
+                }</span>
+
+                <span class="cov0" title="0">w.WriteHeader(http.StatusOK)
+                w.Write([]byte("success booking!"))</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package controller
+
+import (
+        "github.com/Quizert/room-reservation-system/Libs/middleware"
+        "net/http"
+)
+
+func SetupRoutes(bookingHandler *BookingHandler) *http.ServeMux <span class="cov0" title="0">{
+        mux := http.NewServeMux()
+
+        middlewareHandler := middleware.NewMiddleware("LUIGI")
+        mux.HandleFunc("/bookings", middlewareHandler.Auth(bookingHandler.CreateBooking, false))             // POST - Создается новое бронирование
+        mux.HandleFunc("/bookings/users", middlewareHandler.Auth(bookingHandler.GetBookingByUserID, false))  // GET - получаем все бронирования пользователя
+        mux.HandleFunc("/bookings/hotels", middlewareHandler.Auth(bookingHandler.GetBookingByHotelID, true)) // Get - получаем все бронирования отельера
+
+        mux.HandleFunc("/bookings/hotels/rooms", bookingHandler.GetAvailableRooms) //Тут добавить сортировку по времени
+        mux.HandleFunc("/bookings/payment/response", bookingHandler.HandlePaymentWebHook)
+        return mux
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
